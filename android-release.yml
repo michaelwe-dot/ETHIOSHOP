@@ -1,0 +1,66 @@
+name: Build and Upload AAB
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+      PLAY_STORE_JSON: ${{ secrets.PLAY_STORE_JSON }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install Ruby (for fastlane)
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.1'
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          gem install fastlane -NV
+          cd android
+          bundle install || true
+
+      - name: Decode keystore
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore.jks
+
+      - name: Set up gradle.properties for signing
+        run: |
+          cat <<EOF >> android/gradle.properties
+          KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
+          KEY_ALIAS=${KEY_ALIAS}
+          KEY_PASSWORD=${KEY_PASSWORD}
+          EOF
+
+      - name: Build AAB
+        run: |
+          cd android
+          ./gradlew bundleRelease -Pandroid.injected.signing.store.file=keystore.jks -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD -Pandroid.injected.signing.key.alias=$KEY_ALIAS -Pandroid.injected.signing.key.password=$KEY_PASSWORD --no-daemon
+
+      - name: Copy AAB
+        run: |
+          ls -la android/app/build/outputs/bundle/release/
+          cp android/app/build/outputs/bundle/release/app-release.aab .
+
+      - name: Upload to Play (fastlane)
+        env:
+          PLAY_STORE_JSON: ${{ secrets.PLAY_STORE_JSON }}
+        run: |
+          echo "$PLAY_STORE_JSON" > /tmp/google-play-key.json
+          cd android
+          bundle exec fastlane beta
