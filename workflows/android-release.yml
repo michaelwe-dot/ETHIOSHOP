@@ -1,66 +1,69 @@
-name: Build and Upload AAB
+name: Build & Upload APK & AAB
 
 on:
   push:
     branches:
       - main
+    paths:
+      - "flutter/**"
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-      KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-      KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      PLAY_STORE_JSON: ${{ secrets.PLAY_STORE_JSON }}
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v3
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Ruby (for fastlane)
-        uses: ruby/setup-ruby@v1
+      - name: Install Flutter
+        uses: subosito/flutter-action@v2
         with:
-          ruby-version: '3.1'
+          flutter-version: '3.22.0'
 
+      # Go into the /flutter folder
       - name: Install dependencies
         run: |
-          sudo apt update
-          gem install fastlane -NV
-          cd android
-          bundle install || true
+          cd flutter
+          flutter pub get
 
-      - name: Decode keystore
+      # Decode your keystore
+      - name: Decode Keystore
         run: |
-          echo "$KEYSTORE_BASE64" | base64 --decode > android/keystore.jks
+          echo "$KEYSTORE_BASE64" | base64 --decode > flutter/android/app/ethio.keystore
 
-      - name: Set up gradle.properties for signing
+      # Create signing file
+      - name: Create key.properties
         run: |
-          cat <<EOF >> android/gradle.properties
-          KEYSTORE_PASSWORD=${KEYSTORE_PASSWORD}
-          KEY_ALIAS=${KEY_ALIAS}
-          KEY_PASSWORD=${KEY_PASSWORD}
+          cat <<EOF > flutter/android/key.properties
+          storeFile=ethio.keystore
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
           EOF
 
+      # Build AAB
       - name: Build AAB
         run: |
-          cd android
-          ./gradlew bundleRelease -Pandroid.injected.signing.store.file=keystore.jks -Pandroid.injected.signing.store.password=$KEYSTORE_PASSWORD -Pandroid.injected.signing.key.alias=$KEY_ALIAS -Pandroid.injected.signing.key.password=$KEY_PASSWORD --no-daemon
+          cd flutter
+          flutter build appbundle --release
 
-      - name: Copy AAB
+      # Build APK
+      - name: Build APK
         run: |
-          ls -la android/app/build/outputs/bundle/release/
-          cp android/app/build/outputs/bundle/release/app-release.aab .
+          cd flutter
+          flutter build apk --release
 
-      - name: Upload to Play (fastlane)
-        env:
-          PLAY_STORE_JSON: ${{ secrets.PLAY_STORE_JSON }}
-        run: |
-          echo "$PLAY_STORE_JSON" > /tmp/google-play-key.json
-          cd android
-          bundle exec fastlane beta
+      # Save artifacts
+      - name: Save Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ETHIOSHOP-build
+          path: |
+            flutter/build/app/outputs/flutter-apk/app-release.apk
+            flutter/build/app/outputs/bundle/release/app-release.aab
