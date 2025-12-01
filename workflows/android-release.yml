@@ -1,0 +1,69 @@
+name: Build APK & AAB
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "flutter/**"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Java
+      uses: actions/setup-java@v3
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: Install Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.22.0'
+
+    # <--- IMPORTANT: build inside /flutter folder!!!
+    - name: Install dependencies
+      run: |
+        cd flutter
+        flutter pub get
+
+    # Decode keystore
+    - name: Decode Keystore
+      run: |
+        echo "$KEYSTORE_BASE64" | base64 --decode > flutter/android/app/ethio.keystore
+
+    # Create key.properties
+    - name: Create key.properties
+      run: |
+        cat <<EOF > flutter/android/key.properties
+        storeFile=ethio.keystore
+        storePassword=$KEYSTORE_PASSWORD
+        keyPassword=$KEY_PASSWORD
+        keyAlias=$KEY_ALIAS
+        EOF
+
+    # Build AAB using Flutter (not Gradle)
+    - name: Build AAB
+      run: |
+        cd flutter
+        flutter build appbundle --release
+
+    # Build APK
+    - name: Build APK
+      run: |
+        cd flutter
+        flutter build apk --release
+
+    # Upload artifacts
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-build
+        path: |
+          flutter/build/app/outputs/flutter-apk/app-release.apk
+          flutter/build/app/outputs/bundle/release/app-release.aab
