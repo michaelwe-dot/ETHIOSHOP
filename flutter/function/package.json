@@ -1,0 +1,10 @@
+{
+  "name": "ethio_functions",
+  "version": "1.0.0",
+  "engines": { "node": "18" },
+  "dependencies": {
+    "firebase-admin": "^11.10.0",
+    "firebase-functions": "^4.4.0",
+    "sharp": "^0.32.1"
+  }
+}
