@@ -3,7 +3,7 @@ name: Build and Upload APK & AAB
 on:
   push:
     branches:
-      - main
+      - add-gradle-wrapper
 
 jobs:
   build:
