@@ -1,0 +1,13 @@
+default_platform(:android)
+
+platform :android do
+  desc "Build and upload to internal track"
+  lane :beta do
+    gradle(task: "clean")
+    gradle(task: "bundle", build_type: "Release")
+    upload_to_play_store(
+      track: 'internal',
+      json_key: ENV['PLAY_STORE_JSON']
+    )
+  end
+end
